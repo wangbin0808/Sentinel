@@ -81,7 +81,9 @@ public class ClusterBuilderSlot extends AbstractLinkedProcessorSlot<DefaultNode>
             synchronized (lock) {
                 if (clusterNode == null) {
                     // Create the cluster node.
+                    // 创建一个ClusterNode 节点
                     clusterNode = new ClusterNode(resourceWrapper.getName(), resourceWrapper.getResourceType());
+                    // 防止"迭代稳定性问题" -- 对于共享集合的写操作，避免赃数据
                     HashMap<ResourceWrapper, ClusterNode> newMap = new HashMap<>(Math.max(clusterNodeMap.size(), 16));
                     newMap.putAll(clusterNodeMap);
                     newMap.put(node.getId(), clusterNode);

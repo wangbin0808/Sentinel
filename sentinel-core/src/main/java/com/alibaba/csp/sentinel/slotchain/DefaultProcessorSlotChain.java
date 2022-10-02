@@ -20,9 +20,11 @@ import com.alibaba.csp.sentinel.context.Context;
 /**
  * @author qinan.qn
  * @author jialiang.linjl
+ * 这是一个单向链表
  */
 public class DefaultProcessorSlotChain extends ProcessorSlotChain {
 
+    // 声明链一个同类型的变量，其可以指向下一个solt节点
     AbstractLinkedProcessorSlot<?> first = new AbstractLinkedProcessorSlot<Object>() {
 
         @Override
@@ -72,6 +74,7 @@ public class DefaultProcessorSlotChain extends ProcessorSlotChain {
     @Override
     public void entry(Context context, ResourceWrapper resourceWrapper, Object t, int count, boolean prioritized, Object... args)
         throws Throwable {
+        // 转向下一个节点
         first.transformEntry(context, resourceWrapper, t, count, prioritized, args);
     }
 

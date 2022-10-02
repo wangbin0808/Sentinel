@@ -158,12 +158,14 @@ public class NodeSelectorSlot extends AbstractLinkedProcessorSlot<Object> {
             synchronized (this) {
                 node = map.get(context.getName());
                 if (node == null) {
+                    // 创建一个DefaultNode，并放入缓存map
                     node = new DefaultNode(resourceWrapper, null);
                     HashMap<String, DefaultNode> cacheMap = new HashMap<String, DefaultNode>(map.size());
                     cacheMap.putAll(map);
                     cacheMap.put(context.getName(), node);
                     map = cacheMap;
                     // Build invocation tree
+                    // 将新建node添加到调用树中
                     ((DefaultNode) context.getLastNode()).addChild(node);
                 }
 

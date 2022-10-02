@@ -136,9 +136,12 @@ public class DefaultNode extends StatisticNode {
         this.clusterNode.decreaseThreadNum();
     }
 
+    // 通过com.alibaba.csp.sentinel.slots.statistic.StatisticSlot.entry 方法进入到这个方法
     @Override
     public void addPassRequest(int count) {
+        // 增加当前入口的defaultNode中的统计数据
         super.addPassRequest(count);
+        // 增加当前资源的clusterNode中的全局统计数据
         this.clusterNode.addPassRequest(count);
     }
 

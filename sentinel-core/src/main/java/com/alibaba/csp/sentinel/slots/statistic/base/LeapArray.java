@@ -40,11 +40,16 @@ import com.alibaba.csp.sentinel.util.TimeUtil;
  */
 public abstract class LeapArray<T> {
 
+    // 样本窗口长度
     protected int windowLengthInMs;
+    // 一个时间窗中包含的时间窗口数量
     protected int sampleCount;
+    // 时间窗长度
     protected int intervalInMs;
     private double intervalInSecond;
 
+    // 这个一个数组，元素为windowwrap样本窗口
+    // 注意，这里的范型T实际为MetricBucket类型
     protected final AtomicReferenceArray<WindowWrap<T>> array;
 
     /**
@@ -75,6 +80,7 @@ public abstract class LeapArray<T> {
      * Get the bucket at current timestamp.
      *
      * @return the bucket at current timestamp
+     *  获取当前时间所在的样本窗口
      */
     public WindowWrap<T> currentWindow() {
         return currentWindow(TimeUtil.currentTimeMillis());
@@ -98,12 +104,16 @@ public abstract class LeapArray<T> {
     protected abstract WindowWrap<T> resetWindowTo(WindowWrap<T> windowWrap, long startTime);
 
     private int calculateTimeIdx(/*@Valid*/ long timeMillis) {
+        // 计算当前时间在那个样本窗口（样本窗口下标），当前时间/样本窗口长度
         long timeId = timeMillis / windowLengthInMs;
         // Calculate current index so we can map the timestamp to the leap array.
+        // 计算具体索引，这个array就是装样本窗口的数组
         return (int)(timeId % array.length());
     }
 
+    // 获取timeMillis时间所在窗口的开始时间
     protected long calculateWindowStart(/*@Valid*/ long timeMillis) {
+        // 当前时间 减去 当前时间除以样本窗口的长度的余数
         return timeMillis - timeMillis % windowLengthInMs;
     }
 
@@ -113,13 +123,28 @@ public abstract class LeapArray<T> {
      * @param timeMillis a valid timestamp in milliseconds
      * @return current bucket item at provided timestamp if the time is valid; null if time is invalid
      */
+    /**
+     * 4. 样本窗口获取流程分析
+     * 当我们拿到样本窗口在环形数组的下标和样本窗口的开始时间后，是如何获得或创建样本窗口的呢？ 接下来我们分析这一部分。
+     * 通过以下代码可以看出，这里开启了一个死循环，直到获取到样本窗口才退出循环，因为多线程操作，可能其他线程也才操作这个环形数组。 所以这个死循环是必要的。在这个死循环中，会产生以下几种情况
+     * 1、在环形数组中找不到样本窗口
+     *      这种情况一般发生在程序刚刚运行的时候，需要创建一个样本窗口放入环形数组对应的下标中
+     * 2、找到样本窗口并且样本窗口开始时间和需要的样本开始时间一致
+     *      则说明要找的样本窗口就是当前数组中索引对应的样本窗口，可返回直接使用。
+     * 3、找到样本窗口，但需要的样本窗口开始时间大于找到的样本窗口开始时间
+     *      这种情况其实是最常见的， 说明找到的样本窗口过时了，需要对样本窗口reset后重新使用（这里避免了重新创建各种对象，会变得更高效，这也是环形数组的特性）
+     * 4、找到样本窗口，但需要的样本窗口开始时间小于找到的样本窗口开始时间
+     *      首先基本不会出现这种情况，因为时间不会倒流，除非人为系统调快了时间。 所以这里的逻辑是一个兜底的方法，这里采用了直接创建一个游离在环形数组外的样本窗口返回
+     */
     public WindowWrap<T> currentWindow(long timeMillis) {
         if (timeMillis < 0) {
             return null;
         }
 
+        // 计算时间所在的样本窗口id，即在计算数组leapArray中的索引
         int idx = calculateTimeIdx(timeMillis);
         // Calculate current bucket start time.
+        // 计算当前样本窗口的开始时间点
         long windowStart = calculateWindowStart(timeMillis);
 
         /*
@@ -130,7 +155,9 @@ public abstract class LeapArray<T> {
          * (3) Bucket is deprecated, then reset current bucket and clean all deprecated buckets.
          */
         while (true) {
+            // 获取到当前时间所在的样本窗口
             WindowWrap<T> old = array.get(idx);
+            // 如果获取不到，表示没有创建
             if (old == null) {
                 /*
                  *     B0       B1      B2    NULL      B4
@@ -144,7 +171,9 @@ public abstract class LeapArray<T> {
                  * then try to update circular array via a CAS operation. Only one thread can
                  * succeed to update, while other threads yield its time slice.
                  */
+                // 创建新的时间窗口
                 WindowWrap<T> window = new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
+                // 通过CAS方式将新建窗口放入array
                 if (array.compareAndSet(idx, null, window)) {
                     // Successfully updated, return the created bucket.
                     return window;
@@ -153,6 +182,7 @@ public abstract class LeapArray<T> {
                     Thread.yield();
                 }
             } else if (windowStart == old.windowStart()) {
+                // 若当前样本窗口的起始时间点与计算出的样本窗口起始点相同，则说明两个是同一个样本窗口
                 /*
                  *     B0       B1      B2     B3      B4
                  * ||_______|_______|_______|_______|_______||___
@@ -166,6 +196,8 @@ public abstract class LeapArray<T> {
                  */
                 return old;
             } else if (windowStart > old.windowStart()) {
+                // 若当前样本窗口的起始时间点 大于 计算出的样本起始时间点，说明计算出的样本窗口已经过时了
+                // 需要将原来的样本窗口替换
                 /*
                  *   (old)
                  *             B0       B1      B2    NULL      B4
@@ -186,6 +218,7 @@ public abstract class LeapArray<T> {
                 if (updateLock.tryLock()) {
                     try {
                         // Successfully get the update lock, now we reset the bucket.
+                        // 替换掉老的样本窗口
                         return resetWindowTo(old, windowStart);
                     } finally {
                         updateLock.unlock();
@@ -195,6 +228,8 @@ public abstract class LeapArray<T> {
                     Thread.yield();
                 }
             } else if (windowStart < old.windowStart()) {
+                // 当前样本窗口的起始时间点 小于 计算出的样本窗口起始时间点
+                // 这种情况一般不会出现，因为时间不会倒流。除非认为修改了系统时钟
                 // Should not go through here, as the provided time is already behind.
                 return new WindowWrap<T>(windowLengthInMs, windowStart, newEmptyBucket(timeMillis));
             }
@@ -268,6 +303,7 @@ public abstract class LeapArray<T> {
     }
 
     public boolean isWindowDeprecated(long time, WindowWrap<T> windowWrap) {
+        // 当前时间与当前样本窗口的时间差 大于 时间窗长度===》说明当前样本窗口已经过时
         return time - windowWrap.windowStart() > intervalInMs;
     }
 
@@ -290,6 +326,7 @@ public abstract class LeapArray<T> {
             if (windowWrap == null || isWindowDeprecated(validTime, windowWrap)) {
                 continue;
             }
+            // 把符合的样本窗口返回去
             result.add(windowWrap);
         }
 
@@ -333,7 +370,9 @@ public abstract class LeapArray<T> {
         int size = array.length();
         List<T> result = new ArrayList<T>(size);
 
+        // 遍历array中的每一个样本窗口实例
         for (int i = 0; i < size; i++) {
+            // 若当前遍历实例为空或已经过时，则继续下一个
             WindowWrap<T> windowWrap = array.get(i);
             if (windowWrap == null || isWindowDeprecated(timeMillis, windowWrap)) {
                 continue;

@@ -40,17 +40,21 @@ public class DegradeSlot extends AbstractLinkedProcessorSlot<DefaultNode> {
     @Override
     public void entry(Context context, ResourceWrapper resourceWrapper, DefaultNode node, int count,
                       boolean prioritized, Object... args) throws Throwable {
+        // 完成熔断降级检测
         performChecking(context, resourceWrapper);
 
         fireEntry(context, resourceWrapper, node, count, prioritized, args);
     }
 
     void performChecking(Context context, ResourceWrapper r) throws BlockException {
+        // 获取当前资源的所有熔断器
         List<CircuitBreaker> circuitBreakers = DegradeRuleManager.getCircuitBreakers(r.getName());
+        // 若熔断器为空，则返回
         if (circuitBreakers == null || circuitBreakers.isEmpty()) {
             return;
         }
         for (CircuitBreaker cb : circuitBreakers) {
+            // 若没有通过当前熔断器，则直接抛出异常
             if (!cb.tryPass(context)) {
                 throw new DegradeException(cb.getRule().getLimitApp(), cb.getRule());
             }

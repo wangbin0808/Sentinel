@@ -93,6 +93,11 @@ public class StatisticNode implements Node {
      * Holds statistics of the recent {@code INTERVAL} milliseconds. The {@code INTERVAL} is divided into time spans
      * by given {@code sampleCount}.
      */
+    /**
+     * 定义了一个使用数组保存数据的计量器
+     * SAMPLE_COUNT：样本窗口的数量，默认值为2
+     * INTERVAL，时间窗长度，默认值1000毫秒
+     */
     private transient volatile Metric rollingCounterInSecond = new ArrayMetric(SampleCountProperty.SAMPLE_COUNT,
         IntervalProperty.INTERVAL);
 
@@ -104,6 +109,7 @@ public class StatisticNode implements Node {
 
     /**
      * The counter for thread count.
+     * 统计线程数
      */
     private LongAdder curThreadNum = new LongAdder();
 
@@ -198,6 +204,9 @@ public class StatisticNode implements Node {
 
     @Override
     public double passQps() {
+        // rollingCounterInSecond.pass() 当前时间窗通过的通过的请求数量
+        //  rollingCounterInSecond.getWindowIntervalInSec() 时间窗长度
+        // 这两数相除，计算出的qps
         return rollingCounterInSecond.pass() / rollingCounterInSecond.getWindowIntervalInSec();
     }
 
@@ -242,9 +251,12 @@ public class StatisticNode implements Node {
         return (int)curThreadNum.sum();
     }
 
+    // 通过com.alibaba.csp.sentinel.node.DefaultNode.addPassRequest调用进入DefaultNode.addPassRequest方法
     @Override
     public void addPassRequest(int count) {
+        // 按秒滑动统计
         rollingCounterInSecond.addPass(count);
+        // 按分钟滑动统计
         rollingCounterInMinute.addPass(count);
     }
 

@@ -117,28 +117,43 @@ public class ContextUtil {
         return trueEnter(name, origin);
     }
 
+    /**
+     * 名称和来源 ContextUtil.enter("entranceOne", "appA");
+     * @param name
+     * @param origin
+     * @return
+     */
     protected static Context trueEnter(String name, String origin) {
+        // 从ThreadLocal中获取context
         Context context = contextHolder.get();
+        // 若ThreadLocal中没有context，则尝试着从缓存map中获取
         if (context == null) {
+            // 缓存map的key为context名称，value为entranceNode
             Map<String, DefaultNode> localCacheNameMap = contextNameNodeMap;
+            // 从entranceNode -- 双重检测锁DCL-- 为了防止并发
             DefaultNode node = localCacheNameMap.get(name);
             if (node == null) {
+                // 若缓存map的size大于context数量的最大阈值，则直接返回null
                 if (localCacheNameMap.size() > Constants.MAX_CONTEXT_NAME_SIZE) {
                     setNullContext();
                     return NULL_CONTEXT;
                 } else {
                     LOCK.lock();
                     try {
+                        //
                         node = contextNameNodeMap.get(name);
                         if (node == null) {
                             if (contextNameNodeMap.size() > Constants.MAX_CONTEXT_NAME_SIZE) {
                                 setNullContext();
                                 return NULL_CONTEXT;
                             } else {
+                                // 创建一个entranceNode
                                 node = new EntranceNode(new StringResourceWrapper(name, EntryType.IN), null);
-                                // Add entrance node.
+                                // Add entrance node. 将新建的node添加到root
                                 Constants.ROOT.addChild(node);
 
+                                // 将新建node写入到缓存map
+                                // 为了防止"迭代稳定性问题"-iterate stable  ---- 对于共享集合的写操作，避免脏数据
                                 Map<String, DefaultNode> newMap = new HashMap<>(contextNameNodeMap.size() + 1);
                                 newMap.putAll(contextNameNodeMap);
                                 newMap.put(name, node);
@@ -150,8 +165,11 @@ public class ContextUtil {
                     }
                 }
             }
+            // 将context的name与entranceNode封装为context
             context = new Context(node, name);
+            // 初始化context的来源
             context.setOrigin(origin);
+            // 将context放到threadLocal
             contextHolder.set(context);
         }
 

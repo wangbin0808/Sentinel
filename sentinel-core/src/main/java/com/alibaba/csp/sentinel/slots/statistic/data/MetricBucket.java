@@ -25,8 +25,11 @@ import java.util.concurrent.atomic.LongAdder;
  * @author jialiang.linjl
  * @author Eric Zhao
  */
+// 统计数据的
 public class MetricBucket {
 
+    // 统计的数据存放在这里，
+    // 这里统计的数据维度是多维度的，这些维度类型在MetricEvent枚举中
     private final LongAdder[] counters;
 
     private volatile long minRt;
@@ -59,6 +62,7 @@ public class MetricBucket {
      * @return new metric bucket in initial state
      */
     public MetricBucket reset() {
+        // 将每个维度的统计数据清零
         for (MetricEvent event : MetricEvent.values()) {
             counters[event.ordinal()].reset();
         }

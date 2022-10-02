@@ -79,6 +79,7 @@ public final class Constants {
     public static final int ORDER_STATISTIC_SLOT = -7000;
     public static final int ORDER_AUTHORITY_SLOT = -6000;
     public static final int ORDER_SYSTEM_SLOT = -5000;
+    //  ParamFlowSlot = -3000
     public static final int ORDER_FLOW_SLOT = -2000;
     public static final int ORDER_DEGRADE_SLOT = -1000;
 

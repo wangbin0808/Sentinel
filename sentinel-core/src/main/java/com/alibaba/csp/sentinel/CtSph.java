@@ -114,37 +114,58 @@ public class CtSph implements Sph {
         return asyncEntryWithPriorityInternal(resourceWrapper, count, false, args);
     }
 
+    /**
+     *
+     * @param resourceWrapper 资源实例
+     * @param count 默认值为1
+     * @param prioritized 默认值为false
+     * @param args
+     * @return
+     * @throws BlockException
+     */
     private Entry entryWithPriority(ResourceWrapper resourceWrapper, int count, boolean prioritized, Object... args)
         throws BlockException {
+        // 获取content，是从ThreadLocal里面获取的
+        // 即一个请求回占用一个线程，一个线程会绑定一个context
         Context context = ContextUtil.getContext();
+        // 若context是NullContext类型，则表示当前系统中的context数量已经超出的阈值
+        // 即访问请求的数量已经超出了阈值。此时直接返回一个无需做规则检测的资源操作对象
         if (context instanceof NullContext) {
             // The {@link NullContext} indicates that the amount of context has exceeded the threshold,
             // so here init the entry only. No rule checking will be done.
             return new CtEntry(resourceWrapper, null, context);
         }
 
+        // 若当前线程中没有绑定context，则创建一个context并将其放入到ThreadLocal
         if (context == null) {
             // Using default context.
+            // 获取默认的context
             context = InternalContextUtil.internalEnter(Constants.CONTEXT_DEFAULT_NAME);
         }
 
         // Global switch is close, no rule checking will do.
+        // 若全局开关是关闭的，则直接返回一个无需做规则校验的资源操作对象
         if (!Constants.ON) {
             return new CtEntry(resourceWrapper, null, context);
         }
 
+        // 查找slotChain
         ProcessorSlot<Object> chain = lookProcessChain(resourceWrapper);
 
         /*
          * Means amount of resources (slot chain) exceeds {@link Constants.MAX_SLOT_CHAIN_SIZE},
          * so no rule checking will be done.
          */
+        // 若没有找到chain，则意味着chain数量超出了阈值
         if (chain == null) {
             return new CtEntry(resourceWrapper, null, context);
         }
 
+        // 创建一个资源操作对象
         Entry e = new CtEntry(resourceWrapper, chain, context);
         try {
+            // 对资源进行操作
+            //DefaultProcessorSlotChain --》 NodeSelectorSlot--》ClusterBuilderSlot---〉LogSlot--》StatisticSlot -》AuthoritySlot----〉SystemSlot---〉ParamFlowSlot--> FlowSlot---》DegradeSlot
             chain.entry(context, resourceWrapper, null, count, prioritized, args);
         } catch (BlockException e1) {
             e.exit(count, args);
@@ -192,17 +213,24 @@ public class CtSph implements Sph {
      * @return {@link ProcessorSlotChain} of the resource
      */
     ProcessorSlot<Object> lookProcessChain(ResourceWrapper resourceWrapper) {
+        // 从缓存map中获取当前资源的slotchain
+        //缓存map的key为资源，value为其相关的slotchain
         ProcessorSlotChain chain = chainMap.get(resourceWrapper);
+        // DCL
+        // 若缓存中没有相关的soltchain，则创建一个并放入到缓存
         if (chain == null) {
             synchronized (LOCK) {
                 chain = chainMap.get(resourceWrapper);
                 if (chain == null) {
                     // Entry size limit.
+                    // 缓存map的size-》 chain数量最大阈值，则直接返回null，不在创建新的chain
                     if (chainMap.size() >= Constants.MAX_SLOT_CHAIN_SIZE) {
                         return null;
                     }
 
+                    // 创建新的chain
                     chain = SlotChainProvider.newSlotChain();
+                    // 防止迭代稳定性问题
                     Map<ResourceWrapper, ProcessorSlotChain> newMap = new HashMap<ResourceWrapper, ProcessorSlotChain>(
                         chainMap.size() + 1);
                     newMap.putAll(chainMap);
@@ -343,7 +371,11 @@ public class CtSph implements Sph {
     @Override
     public Entry entryWithType(String name, int resourceType, EntryType entryType, int count, boolean prioritized,
                                Object[] args) throws BlockException {
+        // 将信息封装成一个资源对象
         StringResourceWrapper resource = new StringResourceWrapper(name, entryType, resourceType);
+        // 返回一个资源操作对象entry
+        // prioritized 若为true，则表示当前访问必须等待"根据其优先级计算出的时间"后才可通过
+        // prioritized 若为false，则当前请求无需等待
         return entryWithPriority(resource, count, prioritized, args);
     }
 

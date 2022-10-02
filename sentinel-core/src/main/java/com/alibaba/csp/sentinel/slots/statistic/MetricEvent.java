@@ -22,18 +22,24 @@ public enum MetricEvent {
 
     /**
      * Normal pass.
+     * 通过数维度
      */
     PASS,
     /**
      * Normal block.
      */
+    // 流控数维度
     BLOCK,
+    // 异常数维度
     EXCEPTION,
+    // 成功的请求数，在StatisticSlot.exit 方法中调用
     SUCCESS,
+    // 相应总时间毫秒数，在StatisticSlot.exit 方法中调用
     RT,
 
     /**
      * Passed in future quota (pre-occupied, since 1.5.0).
      */
+    //
     OCCUPIED_PASS
 }

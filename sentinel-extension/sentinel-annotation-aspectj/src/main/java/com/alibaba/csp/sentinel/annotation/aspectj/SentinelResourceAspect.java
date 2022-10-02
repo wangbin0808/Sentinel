@@ -32,28 +32,36 @@ import java.lang.reflect.Method;
  *
  * @author Eric Zhao
  */
-@Aspect
+@Aspect  // Aspect 切面
 public class SentinelResourceAspect extends AbstractSentinelAspectSupport {
 
+    /**
+     * 指定切入点为SentinelResource
+     */
     @Pointcut("@annotation(com.alibaba.csp.sentinel.annotation.SentinelResource)")
     public void sentinelResourceAnnotationPointcut() {
     }
 
     @Around("sentinelResourceAnnotationPointcut()")
     public Object invokeResourceWithSentinel(ProceedingJoinPoint pjp) throws Throwable {
+        // 受保护的方法
         Method originMethod = resolveMethod(pjp);
 
+        // 获取@SentinelResource 注解
         SentinelResource annotation = originMethod.getAnnotation(SentinelResource.class);
         if (annotation == null) {
             // Should not go through here.
             throw new IllegalStateException("Wrong state for SentinelResource annotation");
         }
+        // 获取注解上的资源名称
         String resourceName = getResourceName(annotation.value(), originMethod);
         EntryType entryType = annotation.entryType();
         int resourceType = annotation.resourceType();
         Entry entry = null;
         try {
+            // 创建资源entry 要织入的、增强的功能
             entry = SphU.entry(resourceName, resourceType, entryType, pjp.getArgs());
+            // 调用目标方法
             return pjp.proceed();
         } catch (BlockException ex) {
             return handleBlockException(pjp, annotation, ex);

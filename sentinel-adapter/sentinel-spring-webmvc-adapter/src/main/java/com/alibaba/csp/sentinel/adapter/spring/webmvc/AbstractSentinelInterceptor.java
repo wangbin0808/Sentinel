@@ -88,6 +88,7 @@ public abstract class AbstractSentinelInterceptor implements HandlerInterceptor 
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
         throws Exception {
         try {
+            // 获取资源名称，一般是controller方法的@RequestMapping路径，例如/order/{orderId}
             String resourceName = getResourceName(request);
 
             if (StringUtil.isEmpty(resourceName)) {
@@ -99,7 +100,9 @@ public abstract class AbstractSentinelInterceptor implements HandlerInterceptor 
             }
             
             // Parse the request origin using registered origin parser.
+            // 从request中获取请求来源，将来做 授权规则 判断时会用
             String origin = parseOrigin(request);
+            // 获取 contextName，默认是sentinel_spring_web_context
             String contextName = getContextName(request);
             ContextUtil.enter(contextName, origin);
             Entry entry = SphU.entry(resourceName, ResourceTypeConstants.COMMON_WEB, EntryType.IN);

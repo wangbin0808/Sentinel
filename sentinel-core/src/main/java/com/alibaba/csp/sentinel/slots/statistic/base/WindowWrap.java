@@ -21,11 +21,13 @@ package com.alibaba.csp.sentinel.slots.statistic.base;
  * @param <T> data type
  * @author jialiang.linjl
  * @author Eric Zhao
+ * 样本窗口包装类，范型 MetricBucket
  */
 public class WindowWrap<T> {
 
     /**
      * Time length of a single window bucket in milliseconds.
+     *
      */
     private final long windowLengthInMs;
 
@@ -45,8 +47,11 @@ public class WindowWrap<T> {
      * @param value            statistic data
      */
     public WindowWrap(long windowLengthInMs, long windowStart, T value) {
+        // 样本窗口长度
         this.windowLengthInMs = windowLengthInMs;
+        // 样本窗口的起始时间戳
         this.windowStart = windowStart;
+        // 当前样本窗口的统计数据，其类型为MetricBucket，包含了多维度的数据
         this.value = value;
     }
 
